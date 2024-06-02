@@ -264,7 +264,7 @@ class LoraLayer(BaseTunerLayer):
             m, n = in_f - r*nr, r*mr - in_f
             mm, nn_ = m*mr, n * nr
             if m > 0:
-                x_m, x_n = x[..., :mm], x[..., nn_:]
+                x_m, x_n = x[..., :mm], x[..., mm:]
                 x_m = x_m.view(*x.shape[:-1], m, mr).sum(dim=-1)
                 x_n = x_n.view(*x.shape[:-1], n, nr).sum(dim=-1)
                 in_x = torch.cat([x_m, x_n ], dim=-1)
