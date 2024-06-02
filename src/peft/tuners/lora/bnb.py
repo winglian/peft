@@ -238,7 +238,7 @@ if is_bnb_available():
                         if x.dtype != compute_dtype:
                             x = x.to(compute_dtype)
 
-                    if self.use_mora[active_adapter]:
+                    if active_adapter in self.use_mora and self.use_mora[active_adapter]:
                         x = dropout(x)
                         output = self._apply_mora(x, lora_A, lora_B, scaling, active_adapter)
                     elif not self.use_dora[active_adapter]:
