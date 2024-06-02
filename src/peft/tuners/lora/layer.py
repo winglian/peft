@@ -153,7 +153,7 @@ class LoraLayer(BaseTunerLayer):
         if init_lora_weights is False:
             return
 
-        if self.use_mora[adapter_name]:
+        if adapter_name in self.use_mora and self.use_mora[adapter_name]:
             nn.init.zeros_(self.lora_A[adapter_name].weight)
             self.lora_B[adapter_name] = self.lora_A[adapter_name]
             if mora_type is not None:
