@@ -374,6 +374,8 @@ if is_bnb_4bit_available():
                 kwargs.pop("is_external_param", None)
                 kwargs.pop("nvme_swapper", None)
                 kwargs.pop("all_gather", None)
+                kwargs.pop("all_gather_coalesced", None)
+                print(kwargs)
                 # torch.compile can introduce attributes preceded by '_', remove them
                 kwargs = {k: v for k, v in kwargs.items() if not k.startswith("_")}
                 self.get_base_layer().weight = bnb.nn.Params4bit(w_data.to("cpu"), **kwargs).to(weight.device)
@@ -424,6 +426,7 @@ if is_bnb_4bit_available():
                 kwargs.pop("is_external_param", None)
                 kwargs.pop("nvme_swapper", None)
                 kwargs.pop("all_gather", None)
+                kwargs.pop("all_gather_coalesced", None)
                 self.get_base_layer().weight = bnb.nn.Params4bit(w_data.to("cpu"), **kwargs).to(weight.device)
 
                 if self.lora_bias[active_adapter]:
