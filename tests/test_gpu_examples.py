@@ -4404,6 +4404,34 @@ class TestPeftTorchao:
             "int8_dynamic_activation_int8_weight": Int8DynamicActivationInt8WeightConfig(),
         }[quant_type]
 
+    @pytest.mark.single_gpu_tests
+    def test_torchao_lora_manual_quantize_no_hf_quantizer(self):
+        # Regression: a base quantized directly via torchao.quantize_() has no HF quantizer, so peft
+        # cannot source `get_apply_tensor_subclass`. That kwarg is only used by merge()/unmerge(), so
+        # adapter injection and training must still work -- previously this raised at construction with
+        # `TypeError: TorchaoLoraLinear.__init__() missing 1 required keyword-only argument:
+        # 'get_apply_tensor_subclass'`. Only merging into the base requires it (and now errors clearly).
+        from torchao.quantization import Int8WeightOnlyConfig, quantize_
+
+        device = 0
+        model = AutoModelForCausalLM.from_pretrained(self.causal_lm_model_id, device_map=device)
+        quantize_(model, Int8WeightOnlyConfig())
+
+        config = LoraConfig(r=8, target_modules=["q_proj", "v_proj"], task_type="CAUSAL_LM")
+        model = get_peft_model(model, config)  # must not raise
+
+        input_ids = torch.tensor([[1, 2, 3, 4, 5]], device=device)
+        model(input_ids=input_ids, labels=input_ids).loss.backward()
+        assert any(
+            p.grad is not None and torch.isfinite(p.grad).all()
+            for _, p in model.named_parameters()
+            if p.requires_grad
+        )
+
+        # Merging needs get_apply_tensor_subclass, unavailable for a directly-quantized base -> clear error.
+        with pytest.raises(ValueError, match="get_apply_tensor_subclass"):
+            model.merge_adapter()
+
     @pytest.mark.parametrize("quant_type", supported_quant_types)
     @pytest.mark.single_gpu_tests
     def test_causal_lm_training_single_gpu_torchao(self, quant_type, tokenizer):
