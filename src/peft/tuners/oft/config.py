@@ -103,6 +103,15 @@ class OFTConfig(PeftConfig):
         default=None,
         metadata={"help": "List of module names or regex expression of the module names to exclude from OFT."},
     )
+    target_parameters: Optional[list[str]] = field(
+        default=None,
+        metadata={
+            "help": "List of nn.Parameter names to apply input-side OFT to, e.g. fused MoE expert weights "
+            "['mlp.experts.gate_up_proj', 'mlp.experts.down_proj']. The rotation is applied to the activations "
+            "of each expert (the packed/quantized base weight is never dequantized). A parameter whose name "
+            "contains 'gate_up' is treated as a concatenated [gate; up] weight and gets two independent rotations."
+        },
+    )
     init_weights: bool = field(
         default=True,
         metadata={

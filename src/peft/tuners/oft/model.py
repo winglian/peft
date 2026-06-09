@@ -129,6 +129,49 @@ class OFTModel(BaseTuner):
                 config=oft_config,
             )
 
+    def _create_and_replace_param(self, oft_config, module, parameter_name, adapter_name):
+        # Input-side OFT for a fused MoE expert nn.Parameter: parametrize it so it
+        # presents as a RotatedGroupedWeight (rotates activations, base stays packed).
+        from torch.nn.utils import parametrize
+
+        from .experts import OFTGroupedParametrization
+
+        weight = getattr(module, parameter_name)
+        if weight.dim() != 3:
+            raise ValueError(
+                f"OFT `target_parameters` expects a 3-D fused expert weight (num_experts, out, in), "
+                f"but '{parameter_name}' has shape {tuple(weight.shape)}."
+            )
+        num_experts, _, in_features = weight.shape
+        split = 2 if "gate_up" in parameter_name else 1
+        param = OFTGroupedParametrization(num_experts, in_features, split, oft_config, adapter_name).to(
+            device=weight.device, dtype=weight.dtype
+        )
+        parametrize.register_parametrization(module, parameter_name, param, unsafe=True)
+
+    def _inject_parameters(self, peft_config, model, adapter_name, low_cpu_mem_usage):
+        # Snapshot matches before injecting: registering a parametrization mutates the
+        # module's `_parameters`, which would break iteration over `named_parameters`.
+        target_names = sorted(set(peft_config.target_parameters))
+        matches = []
+        for module_name, module in model.named_modules():
+            for param_name, _ in list(module.named_parameters(recurse=False)):
+                key = f"{module_name}.{param_name}"
+                if key in target_names or any(key.endswith(f".{name}") for name in target_names):
+                    matches.append((module, param_name, key))
+        for module, param_name, key in matches:
+            self._create_and_replace_param(peft_config, module, param_name, adapter_name)
+            self.targeted_parameter_names.append(key)
+
+    def _prepare_adapter_config(self, peft_config, model_config):
+        if peft_config.target_modules is None:
+            target_modules = self.target_module_mapping.get(model_config["model_type"])
+            if target_modules is not None:
+                peft_config.target_modules = target_modules if isinstance(target_modules, str) else set(target_modules)
+            elif not peft_config.target_parameters:
+                raise ValueError("Please specify `target_modules` or `target_parameters` in `peft_config`")
+        return peft_config
+
     @staticmethod
     def _create_new_module(oft_config, adapter_name, target, **kwargs):
         # Collect dispatcher functions to decide what backend to use for the replaced OFT layer. The order matters,
